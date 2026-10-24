@@ -1,0 +1,16 @@
+# Alpine 3.23 (musl) with WebKitGTK (webkit2gtk-4.1, GTK3) and Xvfb, for the
+# linux-musl build.
+base:
+- template:_images/alpine-3.23
+vmType: vz
+cpus: 4
+memory: 4GiB
+disk: 10GiB
+plain: true
+provision:
+- mode: system
+  script: |
+    #!/bin/sh
+    set -e
+    command -v Xvfb >/dev/null && exit 0
+    apk add --no-cache xvfb webkit2gtk-4.1 font-dejavu

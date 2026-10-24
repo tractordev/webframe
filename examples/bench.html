@@ -1,0 +1,107 @@
+<html>
+<script>
+// simple, self-contained JavaScript performance test.
+(function () {
+  const now =
+    typeof performance !== "undefined" && performance.now
+      ? () => performance.now()
+      : () => Date.now();
+
+  // Prevent the engine from optimizing work away.
+  let sink = 0;
+
+  const tests = {
+    "Recursion (fib 27)": () => {
+      function fib(n) { return n < 2 ? n : fib(n - 1) + fib(n - 2); }
+      sink += fib(27);
+    },
+
+    "Math loop": () => {
+      let x = 0;
+      for (let i = 1; i < 2_000_000; i++) x += Math.sqrt(i) * Math.sin(i);
+      sink += x;
+    },
+
+    "Array sort (200k)": () => {
+      let seed = 42;
+      const rand = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+      const arr = Array.from({ length: 200_000 }, rand);
+      arr.sort((a, b) => a - b);
+      sink += arr[0];
+    },
+
+    "Array map/filter/reduce": () => {
+      const arr = Array.from({ length: 500_000 }, (_, i) => i);
+      sink += arr.map((x) => x * 2).filter((x) => x % 3 === 0).reduce((a, b) => a + b, 0);
+    },
+
+    "Object allocation": () => {
+      const list = [];
+      for (let i = 0; i < 300_000; i++) list.push({ id: i, name: "item" + i, value: i * 1.5 });
+      sink += list.length;
+    },
+
+    "Map / Set": () => {
+      const m = new Map();
+      const s = new Set();
+      for (let i = 0; i < 200_000; i++) { m.set("k" + i, i); s.add(i % 1000); }
+      let total = 0;
+      for (let i = 0; i < 200_000; i++) total += m.get("k" + i);
+      sink += total + s.size;
+    },
+
+    "String building + regex": () => {
+      let str = "";
+      for (let i = 0; i < 50_000; i++) str += "word" + i + " ";
+      const matches = str.match(/word\d*7\b/g);
+      sink += matches.length + str.toUpperCase().length;
+    },
+
+    "JSON stringify/parse": () => {
+      const data = Array.from({ length: 20_000 }, (_, i) => ({ id: i, tags: ["a", "b", "c"], nested: { x: i, y: [i, i + 1] } }));
+      const json = JSON.stringify(data);
+      sink += JSON.parse(json).length + json.length;
+    },
+  };
+
+  const WARMUP = 2;  // runs discarded so the JIT can compile hot code
+  const RUNS = 5;    // timed runs; we report the median
+
+  const median = (xs) => {
+    const s = xs.slice().sort((a, b) => a - b);
+    const mid = s.length >> 1;
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+
+  const env =
+    typeof navigator !== "undefined" && navigator.userAgent ? navigator.userAgent :
+    typeof Deno !== "undefined" ? "Deno " + Deno.version.deno :
+    typeof Bun !== "undefined" ? "Bun " + Bun.version :
+    typeof process !== "undefined" && process.versions ? "Node " + process.versions.node :
+    "unknown engine";
+
+  console.log("JS benchmark: " + env);
+  console.log("-".repeat(50));
+
+  let totalMs = 0;
+  for (const [name, fn] of Object.entries(tests)) {
+    for (let i = 0; i < WARMUP; i++) fn();
+    const times = [];
+    for (let i = 0; i < RUNS; i++) {
+      const t0 = now();
+      fn();
+      times.push(now() - t0);
+    }
+    const ms = median(times);
+    totalMs += ms;
+    console.log(name.padEnd(30) + ms.toFixed(1).padStart(10) + " ms");
+  }
+
+  console.log("-".repeat(50));
+  console.log("Total (lower is better)".padEnd(30) + totalMs.toFixed(1).padStart(10) + " ms");
+  console.log("Score (higher is better)".padEnd(30) + Math.round(100000 / totalMs).toString().padStart(10));
+  if (sink === 42) console.log(""); // keeps `sink` live
+  window.close();
+})();
+</script>
+</html>

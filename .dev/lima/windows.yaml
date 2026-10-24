@@ -1,0 +1,33 @@
+# Windows 11 ARM64 guest (experimental in Lima; QEMU only, needs plain mode).
+# Download the "English (United States)" Arm64 ISO from
+# https://www.microsoft.com/en-us/software-download/windows11 to the path
+# below, or set WIN_ISO when running `.dev/vm up windows`.
+#
+# Known issue (Lima 2.2.1, ARM64): setup doesn't load the virtio drivers, so
+# the first install needs a hand in the VM display:
+#  1. At "Select location to install", Load Driver > browse the virtio-win CD
+#     > viostor\w11\ARM64, then pick the disk.
+#  2. At the desktop, in an admin PowerShell:
+#       pnputil /add-driver E:\NetKVM\w11\ARM64\*.inf /install
+#       powershell -ExecutionPolicy Bypass -File F:\first_logon.ps1
+#     (the CD drive letters may differ; check with Get-Volume)
+#  3. Run `.dev/vm up windows` again.
+os: Windows
+vmType: qemu
+arch: aarch64
+images:
+- location: "~/Downloads/Win11_25H2_English_Arm64_v2.iso"
+  arch: aarch64
+tpm: false
+cpus: 4
+memory: 8GiB
+disk: 64GiB
+osOpts:
+  Windows:
+    virtioWin:
+    - location: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.271-1/virtio-win-0.1.271.iso
+      arch: aarch64
+      digest: "sha256:bbe6166ad86a490caefad438fef8aa494926cb0a1b37fa1212925cfd81656429"
+plain: true
+video:
+  display: default

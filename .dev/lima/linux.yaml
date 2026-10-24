@@ -1,0 +1,18 @@
+# Ubuntu 24.04 with WebKitGTK (webkit2gtk-4.1, GTK3) and Xvfb, which webframe
+# starts itself when there is no display.
+base:
+- template:_images/ubuntu-24.04
+vmType: vz
+cpus: 4
+memory: 4GiB
+disk: 20GiB
+plain: true
+provision:
+- mode: system
+  script: |
+    #!/bin/sh
+    set -e
+    command -v Xvfb >/dev/null && exit 0
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends xvfb libwebkit2gtk-4.1-0 fonts-dejavu-core

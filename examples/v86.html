@@ -1,0 +1,50 @@
+<html>
+<script src="https://cdn.jsdelivr.net/npm/v86@0.5.472/build/libv86.js"></script>
+<script>
+  console.log("* Run with -c to interact with the guest using send: send(\"ls\\n\")");
+
+  const V86_CDN  = "https://cdn.jsdelivr.net/npm/v86@0.5.472/build";
+  const BIOS_CDN = "https://cdn.jsdelivr.net/gh/copy/v86@master/bios";   // BIOS files aren't in the npm package
+  // copy.sh blocks hotlinking from other origins (403), so serve the kernel yourself:
+  //   curl -O https://i.copy.sh/buildroot-bzimage68.bin
+  // then put it next to this file, or anywhere that sends CORS headers.
+  const KERNEL   = "./buildroot-bzimage68.bin";
+
+  const emulator = new V86({
+    wasm_path: `${V86_CDN}/v86.wasm`,
+    bios:      { url: `${BIOS_CDN}/seabios.bin` },
+    vga_bios:  { url: `${BIOS_CDN}/vgabios.bin` },
+    bzimage:   { url: KERNEL },
+    cmdline:   "console=ttyS0 tsc=reliable mitigations=off random.trust_cpu=on",
+    memory_size: 128 * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    disable_keyboard: true,
+    disable_mouse: true,
+    disable_speaker: true,
+    autostart: true,
+  });
+
+  // Serial port → console.log, one call per line
+  let line = "";
+  emulator.add_listener("serial0-output-byte", (byte) => {
+    const ch = String.fromCharCode(byte);
+    if (ch === "\n") {
+      console.log(line.replace(/\r$/, ""));
+      line = "";
+    } else {
+      line += ch;
+    }
+  });
+
+  // Flush partial lines (e.g. a "# " shell prompt with no newline)
+  setInterval(() => {
+    if (line) { console.log(line); line = ""; }
+  }, 500);
+
+  emulator.add_listener("emulator-ready", () => console.log("* Booting Linux..."));
+
+  // Handy from console: send("uname -a\n")
+  window.emulator = emulator;
+  window.send = (s) => emulator.serial0_send(s);
+</script>
+</html>

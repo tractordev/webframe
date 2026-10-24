@@ -1,0 +1,6 @@
+.DS_Store
+.local
+/dist
+/webframe
+.dev/build
+examples/buildroot-bzimage68.bin

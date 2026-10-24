@@ -1,0 +1,10 @@
+# macOS 15 guest. webframe has to run in the logged-in GUI session, so
+# `.dev/vm setup macos` turns on auto-login.
+base:
+- template:_images/macos-15
+cpus: 4
+memory: 8GiB
+disk: 64GiB
+plain: true
+video:
+  display: default

@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+# Lima VMs for running and testing webframe on linux, alpine (linux-musl),
+# macos and windows.
+#
+#   .dev/vm up <os>             create/start webframe-<os> and prepare it
+#   .dev/vm down <os>           stop it
+#   .dev/vm rm <os>             delete it
+#   .dev/vm status              list webframe VMs
+#   .dev/vm shell <os>          ssh into it
+#   .dev/vm run <os> [args...]  build, copy and run webframe in the guest's
+#                               desktop session (WF_* env is passed through)
+#   .dev/vm test [os...]        run the smoke tests (default: running VMs)
+#
+# Files in .dev/testdata are copied next to the binary, so
+# `.dev/vm run linux page.html` loads .dev/testdata/page.html.
+set -euo pipefail
+
+DEV="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(dirname "$DEV")"
+OSES=(linux alpine macos windows)
+
+die() { echo "vm: $*" >&2; exit 1; }
+log() { echo "vm: $*" >&2; }
+
+inst() { echo "webframe-$1"; }
+
+check_os() {
+	case "${1:-}" in linux|alpine|macos|windows) ;; *) die "unknown os '${1:-}' (want: ${OSES[*]})" ;; esac
+}
+
+field() { limactl list "$(inst "$1")" --format "{{.$2}}" 2>/dev/null; }
+exists() { [[ -n "$(field "$1" Name)" ]]; }
+running() { [[ "$(field "$1" Status)" == Running ]]; }
+
+ssh_() {
+	local os=$1; shift
+	ssh -F "$(field "$os" Dir)/ssh.config" "lima-$(inst "$os")" "$@"
+}
+
+scp_() {
+	local os=$1; shift
+	scp -q -F "$(field "$os" Dir)/ssh.config" "$@"
+}
+
+goarch() {
+	case "$(field "$1" Arch)" in x86_64) echo amd64 ;; *) echo arm64 ;; esac
+}
+
+# quote args for a POSIX shell in the guest
+shquote() {
+	local out=() a
+	for a in "$@"; do out+=("'${a//\'/\'\\\'\'}'"); done
+	echo "${out[*]-}"
+}
+
+envpairs() {
+	local kv
+	while IFS= read -r kv; do
+		[[ "$kv" == WF_* ]] && echo "$kv"
+	done < <(env)
+	return 0
+}
+
+cmd_up() {
+	check_os "$1"
+	local os=$1 name; name=$(inst "$1")
+	if ! exists "$os"; then
+		if [[ "$os" == windows && -n "${WIN_ISO:-}" ]]; then
+			limactl create --tty=false --name "$name" \
+				--set ".images[0].location=\"$WIN_ISO\"" "$DEV/lima/$os.yaml"
+		else
+			limactl create --tty=false --name "$name" "$DEV/lima/$os.yaml"
+		fi
+	fi
+	running "$os" || limactl start --tty=false "$name"
+	"setup_$os"
+	log "$name ready"
+}
+
+setup_linux() { :; }
+setup_alpine() { :; }
+
+# macOS: webframe needs a GUI session, so enable auto-login, and allow running
+# commands in that session (launchctl asuser) without a password.
+# sysadminctl -autologin fails to write /etc/kcpassword in Lima guests
+# (SACSetAutoLoginPassword error:22), so it is written here instead.
+setup_macos() {
+	local os=macos
+	if ssh_ $os 'test -f /etc/sudoers.d/webframe && test "$(stat -f %Su /dev/console)" = "$USER"'; then
+		return
+	fi
+	log "enabling auto-login and passwordless launchctl"
+	ssh_ $os 'cat ~/password' | kcpassword | ssh_ $os 'set -e
+		cat > /tmp/kcpassword
+		pw=$(cat ~/password)
+		echo "$pw" | sudo -S -p "" sh -c "
+			install -m 600 -o root -g wheel /tmp/kcpassword /etc/kcpassword
+			defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser \"$USER\"
+			echo \"$USER ALL=(root) NOPASSWD: /bin/launchctl\" > /etc/sudoers.d/webframe
+			chmod 440 /etc/sudoers.d/webframe
+		"
+		rm /tmp/kcpassword'
+	log "restarting for auto-login"
+	limactl restart --tty=false "$(inst $os)"
+	local i
+	for i in $(seq 60); do
+		ssh_ $os 'test "$(stat -f %Su /dev/console)" = "$USER"' 2>/dev/null && return
+		sleep 2
+	done
+	die "macos: no GUI session after restart; log in via the VM display"
+}
+
+# kcpassword encodes the password on stdin in /etc/kcpassword's format: XOR
+# with a fixed key, zero padded to a multiple of 12 bytes.
+kcpassword() {
+	python3 -c '
+import sys
+pw = sys.stdin.buffer.read().strip()
+key = [0x7D, 0x89, 0x52, 0x23, 0xD2, 0xBC, 0xDD, 0xEA, 0xA3, 0xB9, 0x1F]
+n = len(pw) + 1
+n += (-n) % 12
+buf = pw + bytes(n - len(pw))
+sys.stdout.buffer.write(bytes(b ^ key[i % len(key)] for i, b in enumerate(buf)))
+'
+}
+
+# Windows: see .dev/setup.ps1. webframe runs in the desktop session via a
+# scheduled task (.dev/run.ps1).
+setup_windows() {
+	local os=windows i
+	ssh_ $os 'mkdir webframe' >/dev/null 2>&1 || true
+	scp_ $os "$DEV/setup.ps1" "$DEV/run.ps1" "lima-$(inst $os):webframe/"
+	for i in $(seq 60); do
+		ssh_ $os 'powershell -NoProfile -ExecutionPolicy Bypass -File webframe\setup.ps1' | grep -q session && return
+		sleep 2
+	done
+	die "windows: no desktop session; log in via the VM display"
+}
+
+cmd_down() { check_os "$1"; limactl stop "$(inst "$1")"; }
+cmd_rm() { check_os "$1"; limactl delete --force "$(inst "$1")"; }
+cmd_status() { limactl list | awk 'NR==1 || $1 ~ /^webframe-/'; }
+
+cmd_shell() {
+	check_os "$1"; running "$1" || die "$(inst "$1") is not running (.dev/vm up $1)"
+	ssh_ "$1" -t
+}
+
+# build cross-compiles webframe and copies it with the test data into
+# ~/webframe in the guest.
+build() {
+	local os=$1 goos=$1 bin=webframe
+	running "$os" || die "$(inst "$os") is not running (.dev/vm up $os)"
+	case "$os" in
+		macos) goos=darwin ;;
+		alpine) goos=linux-musl ;;
+		windows) bin=webframe.exe ;;
+	esac
+	local out="$ROOT/.dev/build/$os"
+	mkdir -p "$out"
+	make -s -C "$ROOT" build OS=$goos GOARCH="$(goarch "$os")" VERSION= GOARGS="-o $out/$bin"
+	ssh_ "$os" 'mkdir webframe' </dev/null >/dev/null 2>&1 || true
+	scp_ "$os" "$out/$bin" "$DEV"/testdata/* "lima-$(inst "$os"):webframe/" </dev/null
+}
+
+# run_<os> runs webframe in the guest's desktop session with stdio attached.
+run_linux() {
+	local envs; envs=$(envpairs | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
+	ssh_ linux "cd webframe && env $envs ./webframe $(shquote "$@")"
+}
+
+run_alpine() {
+	local envs; envs=$(envpairs | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
+	ssh_ alpine "cd webframe && env $envs ./webframe $(shquote "$@")"
+}
+
+run_macos() {
+	local envs; envs=$(envpairs | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
+	ssh_ macos "cd webframe && sudo -n launchctl asuser \$(id -u) sudo -n -u \$USER env $envs ./webframe $(shquote "$@")"
+}
+
+# Windows has no way to attach ssh stdio to a process in the desktop session,
+# so stdin is staged to a file and output is collected after the task ends.
+run_windows() {
+	local stdin=/dev/null
+	[[ -t 0 ]] || stdin=-
+	local tmp code=0; tmp=$(mktemp -d)
+	cat "$stdin" > "$tmp/stdin.txt"
+	envpairs > "$tmp/env.txt"
+	if [[ $# -gt 0 ]]; then printf '%s\n' "$@"; fi > "$tmp/args.txt"
+	scp_ windows "$tmp/stdin.txt" "$tmp/env.txt" "$tmp/args.txt" "$DEV/run.ps1" "lima-$(inst windows):webframe/" </dev/null
+	rm -rf "$tmp"
+	ssh_ windows 'powershell -NoProfile -ExecutionPolicy Bypass -File webframe\run.ps1' </dev/null || code=$?
+	return $code
+}
+
+cmd_run() {
+	check_os "${1:-}"; local os=$1; shift
+	build "$os"
+	"run_$os" "$@"
+}
+
+cmd_test() {
+	local oses=("$@") os fail=0
+	if [[ ${#oses[@]} -eq 0 ]]; then
+		for os in "${OSES[@]}"; do running "$os" && oses+=("$os"); done
+		[[ ${#oses[@]} -gt 0 ]] || die "no webframe VMs running (.dev/vm up <os>)"
+	fi
+	for os in "${oses[@]}"; do
+		check_os "$os"
+		echo "== $os"
+		build "$os"
+		VM_OS=$os VM="$0" bash "$DEV/test.sh" || fail=1
+	done
+	return $fail
+}
+
+[[ $# -gt 0 ]] || { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+cmd=$1; shift
+case "$cmd" in
+	up|down|rm|shell) [[ $# -eq 1 ]] || die "usage: .dev/vm $cmd <os>"; "cmd_$cmd" "$1" ;;
+	status|test) "cmd_$cmd" "$@" ;;
+	run) cmd_run "$@" ;;
+	_run) check_os "${1:-}"; os=$1; shift; "run_$os" "$@" ;; # run without rebuilding (used by test.sh)
+	*) die "unknown command '$cmd'" ;;
+esac
