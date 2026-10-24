@@ -1,6 +1,6 @@
 # webframe
 
-Run a web page like a program. webframe loads a URL in a hidden web view,
+Run a web page like a program. webframe loads a URL in a hidden webview,
 keeps it running at full speed, and connects the page to your terminal: the
 `console` goes to stdout, exceptions go to stderr, and you can evaluate
 JavaScript in the page from stdin.
@@ -10,7 +10,7 @@ $ webframe examples/hello.html
 Hello, world!
 ```
 
-It uses the web view the OS already has (WebKit on macOS, WebKitGTK on Linux,
+It uses the webview the OS already has (WebKit on macOS, WebKitGTK on Linux,
 WebView2 on Windows) through [glaze](https://github.com/progrium/glaze), so it
 is a small single binary with no bundled browser and, on most platforms, no
 cgo.
@@ -23,7 +23,8 @@ cgo.
   daemon or worker.
 - Poke at a live page from a REPL with `-c`.
 - Run a single-page app or emulator headless, such as
-  [v86](examples/v86.html), and talk to it over stdio.
+  [v86](examples/v86.html), and talk to it over stdio or WebSocket.
+- Use it as a library for cross-platform isolation
 
 ## Install
 
@@ -195,7 +196,7 @@ import (
 	"tractor.dev/webframe"
 )
 
-func init() { runtime.LockOSThread() } // the web view runs on the main thread
+func init() { runtime.LockOSThread() } // the webview runs on the main thread
 
 func main() {
 	var f *webframe.Frame
@@ -239,7 +240,7 @@ make dist VERSION=0.2           # dist/webframe_v0.2_<os>_<arch>.zip for all tar
 ```
 
 Builds use `CGO_ENABLED=0` and cross-compile from anywhere with plain Go. glaze
-loads the system web view at runtime via [purego](https://github.com/ebitengine/purego).
+loads the system webview at runtime via [purego](https://github.com/ebitengine/purego).
 The Linux binary still depends on the system's glibc and its loader, which
 every glibc distro provides.
 
