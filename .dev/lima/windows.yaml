@@ -12,6 +12,9 @@
 #       powershell -ExecutionPolicy Bypass -File F:\first_logon.ps1
 #     (the CD drive letters may differ; check with Get-Volume)
 #  3. Run `.dev/vm up windows` again.
+#
+# PowerShell takes ~20s to start in this guest (the ARM64 .NET native images
+# aren't generated), so .dev/vm avoids it and uses .dev/winrun instead.
 os: Windows
 vmType: qemu
 arch: aarch64

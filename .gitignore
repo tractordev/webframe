@@ -4,3 +4,4 @@
 /webframe
 .dev/build
 examples/buildroot-bzimage68.bin
+.dev/tmp

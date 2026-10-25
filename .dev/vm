@@ -124,14 +124,22 @@ sys.stdout.buffer.write(bytes(b ^ key[i % len(key)] for i, b in enumerate(buf)))
 '
 }
 
-# Windows: see .dev/setup.ps1. webframe runs in the desktop session via a
-# scheduled task (.dev/run.ps1).
+# Windows: .dev/winrun (a small Go program, since PowerShell takes ~20s to
+# start in the ARM64 guest) enables auto-logon and runs webframe in the
+# desktop session via a scheduled task.
+winrun() {
+	local out="$ROOT/.dev/build/windows"
+	mkdir -p "$out"
+	(cd "$DEV/winrun" && CGO_ENABLED=0 GOOS=windows GOARCH="$(goarch windows)" go build -trimpath -o "$out/winrun.exe" .)
+	ssh_ windows 'mkdir webframe' </dev/null >/dev/null 2>&1 || true
+	scp_ windows "$out/winrun.exe" "lima-$(inst windows):webframe/" </dev/null
+}
+
 setup_windows() {
 	local os=windows i
-	ssh_ $os 'mkdir webframe' >/dev/null 2>&1 || true
-	scp_ $os "$DEV/setup.ps1" "$DEV/run.ps1" "lima-$(inst $os):webframe/"
+	winrun
 	for i in $(seq 60); do
-		ssh_ $os 'powershell -NoProfile -ExecutionPolicy Bypass -File webframe\setup.ps1' | grep -q session && return
+		ssh_ $os 'webframe\winrun.exe setup' </dev/null | grep -q session && return
 		sleep 2
 	done
 	die "windows: no desktop session; log in via the VM display"
@@ -161,6 +169,7 @@ build() {
 	make -s -C "$ROOT" build OS=$goos GOARCH="$(goarch "$os")" VERSION= GOARGS="-o $out/$bin"
 	ssh_ "$os" 'mkdir webframe' </dev/null >/dev/null 2>&1 || true
 	scp_ "$os" "$out/$bin" "$DEV"/testdata/* "lima-$(inst "$os"):webframe/" </dev/null
+	[[ "$os" != windows ]] || winrun
 }
 
 # run_<os> runs webframe in the guest's desktop session with stdio attached.
@@ -187,11 +196,24 @@ run_windows() {
 	local tmp code=0; tmp=$(mktemp -d)
 	cat "$stdin" > "$tmp/stdin.txt"
 	envpairs > "$tmp/env.txt"
-	if [[ $# -gt 0 ]]; then printf '%s\n' "$@"; fi > "$tmp/args.txt"
-	scp_ windows "$tmp/stdin.txt" "$tmp/env.txt" "$tmp/args.txt" "$DEV/run.ps1" "lima-$(inst windows):webframe/" </dev/null
+	scp_ windows "$tmp/stdin.txt" "$tmp/env.txt" "lima-$(inst windows):webframe/" </dev/null
 	rm -rf "$tmp"
-	ssh_ windows 'powershell -NoProfile -ExecutionPolicy Bypass -File webframe\run.ps1' </dev/null || code=$?
+	ssh_ windows "webframe\\winrun.exe run $(winquote "$@")" </dev/null || code=$?
 	return $code
+}
+
+# quote args for a Windows command line (CommandLineToArgvW rules)
+winquote() {
+	local out=() a
+	for a in "$@"; do
+		if [[ -n "$a" && "$a" != *[[:space:]\"]* ]]; then
+			out+=("$a")
+		else
+			a=$(printf '%s' "$a" | sed -E 's/(\\*)"/\1\1\\"/g; s/(\\+)$/\1\1/')
+			out+=("\"$a\"")
+		fi
+	done
+	echo "${out[*]-}"
 }
 
 cmd_run() {

@@ -21,7 +21,7 @@ musl_env = CGO_ENABLED=1 CC="zig cc -target $(MUSL_ARCH_$(1))-linux-musl -dynami
 MUSL_LDFLAGS	:= -linkmode=external -extldflags=-dynamic
 
 ## Build binary (OS=linux-musl for the musl build)
-OS			?= $(GOOS)
+OS				?= $(GOOS)
 MUSL			= $(filter linux-musl,$(OS))
 build:
 	GOOS=$(if $(MUSL),linux,$(OS)) GOARCH=$(GOARCH) $(if $(MUSL),$(call musl_env,$(GOARCH))) \

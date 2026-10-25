@@ -262,7 +262,10 @@ tests on real VMs: Ubuntu, Alpine, macOS 15, and Windows 11 ARM64.
 ```
 
 Files in `.dev/testdata` are copied next to the binary in the guest. The macOS
-and Windows VMs set up auto-login, since webframe needs a desktop session.
+and Windows VMs set up auto-login, since webframe needs a desktop session. On
+Windows, a small Go helper ([.dev/winrun](.dev/winrun)) runs webframe in that
+session through a scheduled task. It's used instead of PowerShell, which
+takes about 20 seconds to start in the ARM64 guest.
 
 Lima's Windows support is experimental, and the first install needs some
 manual steps in the VM display. They're listed in
