@@ -1,0 +1,30 @@
+<html>
+<script>
+// Measures how often timers and animation frames run, to check whether the
+// page is being throttled. A hidden page that isn't throttled reports
+// "visible", a non-zero viewport, ~250 setTimeout(0)/s (browsers clamp
+// nested timeouts to 4 ms), ~100 setInterval(10)/s and ~60 frames/s. A
+// throttled one reports "hidden" and a handful of timers, or no frames.
+//
+//   $ webframe examples/timers.html
+//   $ WF_SECONDS=5 webframe examples/timers.html
+var seconds = +window.SECONDS || 2;
+var timeouts = 0, intervals = 0, frames = 0;
+var start = performance.now();
+
+(function tick() { timeouts++; setTimeout(tick, 0); })();
+(function frame() { frames++; requestAnimationFrame(frame); })();
+setInterval(function () { intervals++; }, 10);
+
+setTimeout(function () {
+  var s = (performance.now() - start) / 1000;
+  var rate = function (n) { return Math.round(n / s).toString().padStart(6); };
+  console.log("visibility          " + document.visibilityState.padStart(6));
+  console.log("viewport            " + (innerWidth + "x" + innerHeight).padStart(6));
+  console.log("setTimeout(0)/s     " + rate(timeouts) + "  (~250)");
+  console.log("setInterval(10)/s   " + rate(intervals) + "  (~100)");
+  console.log("animation frames/s  " + rate(frames) + "  (~60)");
+  window.close();
+}, seconds * 1000);
+</script>
+</html>

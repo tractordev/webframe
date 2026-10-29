@@ -278,6 +278,9 @@ manual steps in the VM display. They're listed in
 
 - [hello.html](examples/hello.html): prints and exits.
 - [bench.html](examples/bench.html): a small JavaScript benchmark.
+- [timers.html](examples/timers.html): measures how often timers and
+  animation frames run, to check that a hidden page isn't throttled. Set
+  `WF_SECONDS` to change how long it measures (default 2).
 - [csp.html](examples/csp.html): a page whose Content-Security-Policy
   blocks `eval`. Run it with `-c`; each line is evaluated as a single
   expression instead, so `counter.next()` works but `let x = 1` doesn't.
