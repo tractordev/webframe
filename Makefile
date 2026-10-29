@@ -1,5 +1,5 @@
 NAME			?= webframe
-VERSION 		?= 0.1
+VERSION 		?= 0.2-dev
 GOARGS			?=
 GOOS			?= $(shell go env GOOS)
 GOARCH			?= $(shell go env GOARCH)

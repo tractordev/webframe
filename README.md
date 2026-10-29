@@ -53,7 +53,7 @@ Debian/Ubuntu: `apt install libwebkit2gtk-4.1-0 xvfb`
 ## Usage
 
 ```
-webframe [-s|-S] [-e] [-c] [-d] [-v] [-w [WIDTHxHEIGHT]] <url|file>
+webframe [-s|-S] [-e] [-c] [-d] [-p] [-v] [-w [WIDTHxHEIGHT]] <url|file>
 ```
 
 The argument is required. It can be a URL or a path to a local file. Use
@@ -67,6 +67,7 @@ The argument is required. It can be a URL or a path to a local file. Use
 | `-S` | Silence all output (stdout and stderr, including native libraries) |
 | `-w [WxH]` | Show a window, optionally sized, e.g. `-w 1024x768` |
 | `-d` | Enable the web inspector |
+| `-p` | Private: keep cookies, storage and cache in memory only |
 | `-v` | Print version |
 
 ### Output
