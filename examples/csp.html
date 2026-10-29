@@ -1,0 +1,26 @@
+<html>
+<head>
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'">
+<title>csp</title>
+</head>
+<script>
+// This page's CSP has no 'unsafe-eval', so eval and new Function throw.
+// webframe -c falls back to evaluating each line as a single expression:
+//
+//   $ webframe -c examples/csp.html
+//   > counter.next()
+//   1
+//   > document.title
+//   "csp"
+//   > let x = 1
+//   Uncaught SyntaxError: this page's Content-Security-Policy blocks eval, ...
+try {
+  eval("1");
+  console.log("eval allowed");
+} catch (e) {
+  console.log("eval blocked:", e.name);
+}
+
+var counter = { n: 0, next: function () { return ++this.n; } };
+</script>
+</html>
