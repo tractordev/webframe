@@ -278,6 +278,9 @@ manual steps in the VM display. They're listed in
 
 - [hello.html](examples/hello.html): prints and exits.
 - [bench.html](examples/bench.html): a small JavaScript benchmark.
+- [csp.html](examples/csp.html): a page whose Content-Security-Policy
+  blocks `eval`. Run it with `-c`; each line is evaluated as a single
+  expression instead, so `counter.next()` works but `let x = 1` doesn't.
 - [v86.html](examples/v86.html): boots Linux in the
   [v86](https://github.com/copy/v86) x86 emulator and connects its serial
   console to webframe. Run it with `-c` and type `send("ls\n")`. It needs

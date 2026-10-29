@@ -2,6 +2,17 @@
   if (window.__webframe_hooks) return;
   window.__webframe_hooks = true;
 
+  // Keep the originals, so a page that replaces these later can't break
+  // the hooks or the results they report.
+  var stringify = JSON.stringify;
+  var indirectEval = window.eval;
+  var NativePromise = Promise;
+
+  // Defines name on window so the page can't replace it.
+  function lock(name, value) {
+    Object.defineProperty(window, name, { value: value, writable: false, configurable: false, enumerable: false });
+  }
+
   var queue = [];
   var busy = false;
 
@@ -25,8 +36,8 @@
     flush();
   }
 
-  function send(kind, level, text, id) {
-    queue.push({ kind: kind, level: level || "", text: text || "", id: id || 0 });
+  function send(kind, level, text, id, csp) {
+    queue[queue.length] = { kind: kind, level: level || "", text: text || "", id: id || 0, csp: !!csp };
     flush();
   }
 
@@ -46,7 +57,7 @@
 
   function fmt(v, quote) {
     switch (typeof v) {
-      case "string": return quote ? JSON.stringify(v) : v;
+      case "string": return quote ? stringify(v) : v;
       case "undefined": return "undefined";
       case "function": return "[Function: " + (v.name || "(anonymous)") + "]";
       case "symbol": return v.toString();
@@ -57,7 +68,7 @@
     if (v instanceof Error) return fmtErr(v);
     var stack = [];
     try {
-      var s = JSON.stringify(v, function (k, x) {
+      var s = stringify(v, function (k, x) {
         switch (typeof x) {
           case "function": return "[Function: " + (x.name || "(anonymous)") + "]";
           case "symbol": return x.toString();
@@ -134,17 +145,48 @@
     return "Uncaught " + fmt(e);
   }
 
-  window.__webframe_eval = function (id, src) {
+  function settle(id, r) {
+    NativePromise.resolve(r).then(
+      function (v) { send("eval", "", fmt(v, true), id); },
+      function (e) { send("evalerr", "", evalErr(e), id); }
+    );
+  }
+
+  lock("__webframe_eval", function (id, src) {
     var r;
     try {
-      r = (0, eval)(src);
+      r = indirectEval(src);
+    } catch (e) {
+      // CSP without 'unsafe-eval': ask Go to inject src as an expression.
+      if (e instanceof EvalError && /unsafe-eval/.test(e.message)) {
+        send("evalerr", "", src, id, true);
+        return;
+      }
+      send("evalerr", "", evalErr(e), id);
+      return;
+    }
+    settle(id, r);
+  });
+
+  // The CSP fallback runs as three scripts. If the middle one doesn't parse,
+  // begin is never matched by run, and end reports it.
+  var started = {};
+  lock("__webframe_expr_begin", function (id) { started[id] = false; });
+  lock("__webframe_expr_run", function (id, thunk) {
+    started[id] = true;
+    var r;
+    try {
+      r = thunk();
     } catch (e) {
       send("evalerr", "", evalErr(e), id);
       return;
     }
-    Promise.resolve(r).then(
-      function (v) { send("eval", "", fmt(v, true), id); },
-      function (e) { send("evalerr", "", evalErr(e), id); }
-    );
-  };
+    settle(id, r);
+  });
+  lock("__webframe_expr_end", function (id) {
+    if (started[id] === false) {
+      send("evalerr", "", "Uncaught SyntaxError: this page's Content-Security-Policy blocks eval, so only a single expression can be evaluated", id);
+    }
+    delete started[id];
+  });
 })();

@@ -72,6 +72,7 @@ type message struct {
 	Level string `json:"level"`
 	Text  string `json:"text"`
 	ID    int    `json:"id"`
+	CSP   bool   `json:"csp"`
 }
 
 // New creates a Frame. It must be called from the main goroutine, which then
@@ -142,6 +143,13 @@ func (f *Frame) receive(batch []message) {
 				f.opts.Ready()
 			}
 		case "eval", "evalerr":
+			if m.CSP {
+				// The page's Content-Security-Policy forbids eval, so run the
+				// source again as an expression injected by the web view,
+				// which CSP does not apply to.
+				f.evalExpr(m.ID, m.Text)
+				continue
+			}
 			f.mu.Lock()
 			cb := f.evals[m.ID]
 			delete(f.evals, m.ID)
@@ -198,6 +206,17 @@ func (f *Frame) Eval(src string, cb func(result string, err error)) {
 	js, _ := json.Marshal(src)
 	f.w.Dispatch(func() {
 		f.w.Eval(fmt.Sprintf("window.__webframe_eval(%d, %s)", id, js))
+	})
+}
+
+// evalExpr evaluates src as an expression without eval, for pages whose CSP
+// blocks eval. Statements that are not an expression fail to parse; the
+// third script notices that the second never started and reports it.
+func (f *Frame) evalExpr(id int, src string) {
+	f.w.Dispatch(func() {
+		f.w.Eval(fmt.Sprintf("window.__webframe_expr_begin(%d)", id))
+		f.w.Eval(fmt.Sprintf("window.__webframe_expr_run(%d, (function(){ return (\n%s\n); }))", id, src))
+		f.w.Eval(fmt.Sprintf("window.__webframe_expr_end(%d)", id))
 	})
 }
 
