@@ -50,6 +50,10 @@ type Options struct {
 	// Globals are set as string properties of window before any page
 	// script runs.
 	Globals map[string]string
+
+	// Ephemeral keeps cookies, local storage and cache in memory only, so
+	// nothing is shared with earlier or later runs.
+	Ephemeral bool
 }
 
 // Frame is a hidden web view running one page.
@@ -78,6 +82,7 @@ func New(opts Options) (*Frame, error) {
 		Debug:             opts.Debug,
 		Hidden:            !opts.Window,
 		DisableThrottling: true,
+		Ephemeral:         opts.Ephemeral,
 		OnNavigation:      f.navigated,
 		OnClose: func() {
 			if opts.Closed != nil {

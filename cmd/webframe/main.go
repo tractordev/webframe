@@ -66,9 +66,10 @@ func main() {
 	console := flag.Bool("c", false, "interactive console: evaluate stdin lines in the page")
 	debug := flag.Bool("d", false, "enable the web inspector")
 	version := flag.Bool("v", false, "print version and exit")
+	private := flag.Bool("p", false, "private: keep cookies, storage and cache in memory only")
 	flag.Var(&window, "w", "show a window, optionally sized `WIDTHxHEIGHT`")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: webframe [-s|-S] [-e] [-c] [-d] [-v] [-w [WIDTHxHEIGHT]] <url|file>")
+		fmt.Fprintln(os.Stderr, "usage: webframe [-s|-S] [-e] [-c] [-d] [-p] [-v] [-w [WIDTHxHEIGHT]] <url|file>")
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nWF_* environment variables are set as page globals without the prefix.")
 		if runtime.GOOS == "linux" {
@@ -117,11 +118,12 @@ func main() {
 	ready := make(chan struct{}, 1)
 	var frame *webframe.Frame
 	frame, err := webframe.New(webframe.Options{
-		Debug:   *debug,
-		Window:  window.set,
-		Width:   window.w,
-		Height:  window.h,
-		Globals: envGlobals(),
+		Debug:     *debug,
+		Window:    window.set,
+		Width:     window.w,
+		Height:    window.h,
+		Globals:   envGlobals(),
+		Ephemeral: *private,
 		Console: func(level, text string) {
 			if level != "log" {
 				text = "[" + level + "] " + text
