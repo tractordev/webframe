@@ -7,8 +7,8 @@
 // throttled one reports "hidden" and a handful of timers, or no frames.
 //
 //   $ webframe examples/timers.html
-//   $ WF_SECONDS=5 webframe examples/timers.html
-var seconds = +window.SECONDS || 2;
+//   $ webframe -E SECONDS=5 examples/timers.html
+var seconds = +(window.webframe && webframe.env.SECONDS) || 2;
 var timeouts = 0, intervals = 0, frames = 0;
 var start = performance.now();
 

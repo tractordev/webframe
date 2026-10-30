@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head><title>todo</title></head>
+<body>
+<!--
+  A tiny app to test with webframe. It loads and saves its list through
+  /api/todos and asks before deleting. todo.test.js tests it without a
+  server, with fetch stubbed by mock-fetch.js:
+
+    $ webframe -y -t 30 -i examples/mock-fetch.js -x examples/todo.test.js examples/todo.html
+-->
+<form id="add"><input id="text" placeholder="What needs doing?"><button>Add</button></form>
+<ul id="list"></ul>
+<script>
+var todos = [];
+
+function render() {
+  var list = document.getElementById("list");
+  list.textContent = "";
+  todos.forEach(function (t, i) {
+    var li = document.createElement("li");
+    li.textContent = t + " ";
+    var del = document.createElement("button");
+    del.className = "delete";
+    del.textContent = "×";
+    del.onclick = function () {
+      if (!confirm("Delete \"" + t + "\"?")) return;
+      todos.splice(i, 1);
+      save();
+    };
+    li.appendChild(del);
+    list.appendChild(li);
+  });
+}
+
+function save() {
+  render();
+  return fetch("/api/todos", { method: "PUT", body: JSON.stringify(todos) });
+}
+
+document.getElementById("add").onsubmit = function (e) {
+  e.preventDefault();
+  var input = document.getElementById("text");
+  if (!input.value.trim()) return;
+  todos.push(input.value.trim());
+  input.value = "";
+  save();
+};
+
+fetch("/api/todos").then(function (r) { return r.json(); }).then(function (t) {
+  todos = t;
+  render();
+});
+</script>
+</body>
+</html>
