@@ -5,7 +5,7 @@
 console.log("hello", 1, { a: [1, 2] }, null, undefined);
 var o = { name: "x" }; o.self = o; console.log(o);
 console.warn("careful");
-console.log("env", typeof TEST === "undefined" ? "unset" : TEST);
+console.log("env", webframe.env.TEST || "unset");
 for (let i = 0; i < 50; i++) console.log("n" + i);
 setTimeout(() => Promise.reject(new TypeError("nope")), 50);
 setTimeout(() => { throw new Error("uncaught thing"); }, 100);

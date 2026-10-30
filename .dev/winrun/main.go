@@ -4,7 +4,7 @@
 //	winrun setup              enable auto-logon etc; prints "session" if a
 //	                          desktop session is active
 //	winrun run [args...]      run webframe.exe in the desktop session with
-//	                          stdin from stdin.txt and WF_* from env.txt,
+//	                          stdin from stdin.txt and env from env.txt,
 //	                          print its output, exit with its code
 //	winrun exec               (internal) the scheduled task's side of run
 //

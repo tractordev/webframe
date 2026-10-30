@@ -1,4 +1,5 @@
-(function () {
+// Called by webframe.go with its config: {env, dialogs, accept}.
+(function (config) {
   if (window.__webframe_hooks) return;
   window.__webframe_hooks = true;
 
@@ -129,6 +130,30 @@
 
   window.close = function () { send("close"); };
 
+  lock("webframe", Object.freeze({
+    env: Object.freeze(Object.assign(Object.create(null), config.env)),
+    exit: function (code) {
+      if (code === undefined) code = 0;
+      code = Number(code);
+      send("exit", "", "", Number.isInteger(code) ? code : 1);
+    }
+  }));
+
+  // Where the web view doesn't let webframe answer script dialogs, answer
+  // them here instead of letting the engine show its own.
+  if (config.dialogs) {
+    var dialog = function (m) { send("console", "dialog", m === undefined ? "" : String(m)); };
+    window.alert = function (m) { dialog(m); };
+    window.confirm = function (m) { dialog(m); return config.accept; };
+    window.prompt = function (m, text) {
+      dialog(m);
+      return config.accept ? (text === undefined ? "" : String(text)) : null;
+    };
+  }
+
+  // Deferred so the page's own load handlers run first.
+  window.addEventListener("load", function () { setTimeout(function () { send("load"); }, 0); });
+
   send("ready");
 
   // Drops the frames of the eval machinery below the evaluated code.
@@ -143,6 +168,13 @@
       } catch (_) {}
     }
     return "Uncaught " + fmt(e);
+  }
+
+  // Whether a syntax error means the source ended too soon, so more lines
+  // could complete it. Messages are from JavaScriptCore and V8.
+  function incomplete(e) {
+    return e instanceof SyntaxError &&
+      /^(Unexpected end of (script|input)|Unexpected EOF|Unterminated template|Multiline comment was not closed)/.test(e.message);
   }
 
   function settle(id, r) {
@@ -162,7 +194,7 @@
         send("evalerr", "", src, id, true);
         return;
       }
-      send("evalerr", "", evalErr(e), id);
+      send("evalerr", incomplete(e) ? "incomplete" : "", evalErr(e), id);
       return;
     }
     settle(id, r);
@@ -189,4 +221,4 @@
     }
     delete started[id];
   });
-})();
+})

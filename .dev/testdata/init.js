@@ -1,0 +1,1 @@
+window.INITED = "yes";
