@@ -34,7 +34,9 @@ Download a zip for your platform from the releases, or build from source with
 Go 1.27+:
 
 ```
-go install tractor.dev/webframe/cmd/webframe@latest
+git clone https://github.com/tractordev/webframe
+cd webframe
+make build    # ./webframe
 ```
 
 Runtime requirements:
@@ -372,7 +374,7 @@ tests on real VMs: Ubuntu, Alpine, macOS 15, and Windows 11 ARM64.
 ```
 .dev/vm up linux               # create/start webframe-linux
 .dev/vm test                   # build, copy, and run the tests on every running VM
-.dev/vm run macos -c           # run webframe in a VM; stdin and WF_* pass through
+.dev/vm run macos -c           # run webframe in a VM; stdin and -E NAME variables pass through
 .dev/vm status | shell | down | rm
 ```
 

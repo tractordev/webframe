@@ -8,7 +8,8 @@
 #   .dev/vm status              list webframe VMs
 #   .dev/vm shell <os>          ssh into it
 #   .dev/vm run <os> [args...]  build, copy and run webframe in the guest's
-#                               desktop session (WF_* env is passed through)
+#                               desktop session (variables named by -E NAME
+#                               are passed through from the host)
 #   .dev/vm test [os...]        run the smoke tests (default: running VMs)
 #
 # Files in .dev/testdata are copied next to the binary, so
@@ -53,11 +54,21 @@ shquote() {
 	echo "${out[*]-}"
 }
 
+# envpairs prints NAME=VALUE for each -E NAME in the webframe args that is set
+# on the host, so webframe in the guest can read it. -E NAME=VALUE needs
+# nothing passed.
 envpairs() {
-	local kv
-	while IFS= read -r kv; do
-		[[ "$kv" == WF_* ]] && echo "$kv"
-	done < <(env)
+	local a name
+	while [[ $# -gt 0 ]]; do
+		a=$1; shift
+		case "$a" in
+			--) break ;;
+			-E|--E) name=${1-}; shift || true ;;
+			-E=*|--E=*) name=${a#*=} ;;
+			*) continue ;;
+		esac
+		[[ -n "$name" && "$name" != *=* && -n "${!name+x}" ]] && printf '%s=%s\n' "$name" "${!name}"
+	done
 	return 0
 }
 
@@ -174,17 +185,17 @@ build() {
 
 # run_<os> runs webframe in the guest's desktop session with stdio attached.
 run_linux() {
-	local envs; envs=$(envpairs | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
+	local envs; envs=$(envpairs "$@" | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
 	ssh_ linux "cd webframe && env $envs ./webframe $(shquote "$@")"
 }
 
 run_alpine() {
-	local envs; envs=$(envpairs | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
+	local envs; envs=$(envpairs "$@" | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
 	ssh_ alpine "cd webframe && env $envs ./webframe $(shquote "$@")"
 }
 
 run_macos() {
-	local envs; envs=$(envpairs | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
+	local envs; envs=$(envpairs "$@" | while IFS= read -r kv; do shquote "$kv"; done | tr '\n' ' ')
 	ssh_ macos "cd webframe && sudo -n launchctl asuser \$(id -u) sudo -n -u \$USER env $envs ./webframe $(shquote "$@")"
 }
 
@@ -195,7 +206,7 @@ run_windows() {
 	[[ -t 0 ]] || stdin=-
 	local tmp code=0; tmp=$(mktemp -d)
 	cat "$stdin" > "$tmp/stdin.txt"
-	envpairs > "$tmp/env.txt"
+	envpairs "$@" > "$tmp/env.txt"
 	scp_ windows "$tmp/stdin.txt" "$tmp/env.txt" "lima-$(inst windows):webframe/" </dev/null
 	rm -rf "$tmp"
 	ssh_ windows "webframe\\winrun.exe run $(winquote "$@")" </dev/null || code=$?
