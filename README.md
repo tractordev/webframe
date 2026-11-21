@@ -54,6 +54,11 @@ its own private Xvfb and shuts it down when it exits. If you run it under
 
 Debian/Ubuntu: `apt install libwebkit2gtk-4.1-0 xvfb`
 
+On macOS, Gatekeeper blocks a binary that a browser downloaded unless it's
+notarized. If macOS refuses to run `webframe`, clear the quarantine attribute
+with `xattr -d com.apple.quarantine ./webframe`. Downloading with `curl -LO`
+doesn't set that attribute, so the binary runs as is.
+
 ## Usage
 
 ```
@@ -365,6 +370,22 @@ The exception is `linux-musl` for Alpine. purego without cgo only works with
 glibc, so that build uses cgo against musl and cross-compiles with
 [zig](https://ziglang.org) (`zig cc`). You only need zig to build those
 targets.
+
+The darwin binaries in `make dist` are left as Go links them by default: ad
+hoc signed on arm64 and unsigned on amd64, which is enough to run them on the
+Mac that built them. For a release, sign with a Developer ID and notarize, so
+a browser download runs without Gatekeeper blocking it. This needs a Mac, for
+`codesign` and `notarytool`:
+
+```
+# once: save notary credentials (an app-specific password) in the keychain
+xcrun notarytool store-credentials webframe --apple-id you@example.com --team-id TEAMID
+make dist VERSION=0.2 SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" NOTARY_PROFILE=webframe
+```
+
+`SIGN_IDENTITY` signs with the hardened runtime and a secure timestamp, which
+notarization requires. A bare binary can't have a notarization ticket stapled
+to it, so Gatekeeper checks it online the first time it runs.
 
 ## Testing
 
