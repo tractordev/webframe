@@ -4,7 +4,9 @@ package webframe
 
 import (
 	"context"
+	"crypto/rand"
 	_ "embed"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -94,7 +96,6 @@ type Frame struct {
 
 	mu    sync.Mutex
 	url   string
-	id    int
 	evals map[int]*pending
 }
 
@@ -299,8 +300,10 @@ func (f *Frame) EvalContext(ctx context.Context, src string, cb func(result stri
 		return
 	}
 	f.mu.Lock()
-	f.id++
-	id := f.id
+	id := randomID()
+	for f.evals[id] != nil {
+		id = randomID()
+	}
 	p := &pending{cb: cb}
 	f.evals[id] = p
 	if ctx.Done() != nil {
@@ -315,6 +318,20 @@ func (f *Frame) EvalContext(ctx context.Context, src string, cb func(result stri
 	f.w.Dispatch(func() {
 		f.w.Eval(fmt.Sprintf("window.__webframe_eval(%d, %s)", id, js))
 	})
+}
+
+// randomID returns an unpredictable non-negative id for a pending Eval. A
+// page can call window.__webframe directly with a fake result, so a
+// guessable sequential id would let it resolve another Eval's callback with
+// data it made up.
+func randomID() int {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// The OS entropy source is broken; there is no safe fallback that
+		// keeps the id unguessable.
+		panic(err)
+	}
+	return int(binary.BigEndian.Uint64(b[:]) >> 1)
 }
 
 // evalExpr evaluates src as an expression without eval, for pages whose CSP
